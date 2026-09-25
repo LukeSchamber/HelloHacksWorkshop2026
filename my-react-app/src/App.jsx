@@ -1,17 +1,44 @@
 import { useState } from 'react'
 
+function formatTypeNames(types) {
+  const names = types.map((type) => `${type[0].toUpperCase()}${type.slice(1)}`)
+
+  if (names.length < 2) return names[0] || 'no types'
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`
+}
+
 function App() {
   const [selectedType, setSelectedType] = useState('')
+  const [matchup, setMatchup] = useState(null)
+  const [loading, setLoading] = useState(false)
 
-  function getMatchup(type) {
-  // API CALL WILL GO HERE, AND WE WILL RETURN THE RESPONSE
-  return `Fake API response: You are fighting a ${type}-type Pokémon.`;
-}
+  async function getMatchup(type) {
+    try {
+      const response = await fetch(
+        `http://localhost:5001/api/type/${encodeURIComponent(type.toLowerCase())}`,
+      )
 
-function handleTypeClick(type) {
-  const response = getMatchup(type);
-  setSelectedType(response);
-}
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Could not get matchup data:', error)
+      return { error: 'Could not load matchup data. Check that the backend is running.' }
+    }
+  }
+
+  async function handleTypeClick(type) {
+    setSelectedType(type)
+    setLoading(true)
+    setMatchup(null)
+
+    const response = await getMatchup(type)
+    setMatchup(response)
+    setLoading(false)
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl items-center justify-center px-5 py-12">
@@ -30,14 +57,32 @@ function handleTypeClick(type) {
             ['Ground', '🪨', 'border-amber-200 bg-amber-50 text-amber-900'],
           ].map(([type, icon, styles]) => (
             <button key={type} 
-            onClick={() => handleTypeClick(type.name)} 
+            onClick={() => handleTypeClick(type)}
             className={`rounded-2xl border px-4 py-4 text-sm font-bold transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-leaf ${styles}`}>
               <span className="mb-1 block text-xl" aria-hidden="true">{icon}</span>
               {type}
             </button>
           ))}
         </div>
-        {selectedType && <p className="mt-6 text-center text-slate-700">You selected: {selectedType}</p>}
+        {selectedType && (
+          <div className="mt-6 text-center text-slate-700">
+            <p>You selected: {selectedType}</p>
+            {loading && <p className="mt-2 text-sm">Loading matchup...</p>}
+            {matchup?.error && <p className="mt-2 text-sm text-pokeball">{matchup.error}</p>}
+            {matchup && !matchup.error && (
+              <div className="mt-3 space-y-2 text-sm">
+                <p>
+                  {selectedType}-type moves deal half damage to{' '}
+                  Pokémon of the {formatTypeNames(matchup.half_damage_to)} types.
+                </p>
+                <p>
+                  {selectedType}-type Pokémon take double damage from{' '}
+                  moves of the {formatTypeNames(matchup.double_damage_from)} types.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </section>
     </main>
   )
